@@ -134,7 +134,7 @@ Run it yourself:
 PYTHONPATH=src python -m palimpsest.oracle0 --out out   # first run crawls, ~30 min at Crawl-delay: 10
 PYTHONPATH=src python -m palimpsest.crawl --max-hours 4 # the bulk mirror; resumable, stops on throttling
 PYTHONPATH=src python -m palimpsest.crawl --report-only # where the mirror is, fetches nothing
-PYTHONPATH=src python -m unittest discover -s tests -t . # 144 tests, no network
+PYTHONPATH=src python -m unittest discover -s tests -t . # 148 tests, no network
 ```
 
 Stdlib-only, no runtime dependencies. The crawl cache is a build artifact and is **not** committed —
