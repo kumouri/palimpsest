@@ -90,14 +90,17 @@ source, running for Finland, Estonia, New Zealand and the UK — but **no US sta
 not novel; the Illinois work is unoccupied. Phase 0 evaluates LawVM as a possible dependency rather
 than assuming a rewrite.
 
-Open decisions, deliberately not yet made:
+Decisions so far — see [`docs/decisions.md`](docs/decisions.md):
 
 - ~~**Licence.**~~ **Settled: [Apache-2.0](LICENSE)** for the code. See *Licence* below for why the
   statutory text itself is not covered by it.
-- **Contribution model.** Working prior: the reconstructed statutory text stays machine-derived and
-  **immutable**, with all human contribution (plain-language summaries, "what changed and why",
-  links to litigation) in a visibly separate annotation layer. If a person can hand-edit the
-  authoritative text, it stops being a source of truth.
+- ~~**Contribution model.**~~ **Ruled** — statutory text is machine-derived and **immutable**;
+  corrections are filed as claims against the *pipeline*, never as edits to the artifact; all human
+  contribution lives in a visibly separate annotation layer. See
+  [`docs/decisions.md`](docs/decisions.md) D-0001. Re-opens after Phase 1, when the measured error
+  rate is known.
+- ~~**Second jurisdiction.**~~ **Ruled** — federal if feasible, for reach. A strike/insert-style
+  state is required as jurisdiction *three* before claiming the architecture generalises. D-0002.
 
 ## Licence
 

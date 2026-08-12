@@ -1,5 +1,9 @@
 # Technical + Product Spec: a version-control system for Illinois statutory law
 
+> **Two rulings this document lists as open have since been made** (2026-08-11): the community
+> layer (§7) and the second jurisdiction (§10). See **[decisions.md](decisions.md)**, which is the
+> authority where the two disagree. The rest of the spec stands as written.
+
 **Status:** draft for owner review · **Scope:** Illinois, v1 · **Date:** 2026-08-11
 **Name:** none yet — a naming decision is out with the owner. This document says "the project" / "the system" throughout.
 
