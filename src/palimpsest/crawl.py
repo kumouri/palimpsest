@@ -250,9 +250,9 @@ def build_queue(fetcher: Fetcher, *, deadline: float | None = None) -> Queue:
 
     This is the part that makes the crawl a known-size job.  It costs one fetch
     per ILCS chapter (68 of them, ~11 minutes at the crawl delay) and yields
-    every Act in the compilation, which is the complete tier-2 work list.  Both
-    index levels are ordinary cached fetches, so a re-build after a resumed run
-    is free.
+    every Act in the compilation -- 3,479 of them, the complete tier-2 and
+    tier-3 work list.  Both index levels are ordinary cached fetches, so a
+    rebuild after a resumed run is free and can be run ``--offline``.
     """
     chapters = list_chapters(fetcher)
     print(f"[build] {len(chapters)} ILCS chapters", flush=True)
