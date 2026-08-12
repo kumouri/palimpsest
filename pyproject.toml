@@ -12,12 +12,19 @@ license = "Apache-2.0"
 # No runtime dependencies, deliberately.  The spec (§8) recommends Python
 # stdlib-first with httpx + selectolax; for Oracle-0 the stdlib's urllib and
 # html.parser are entirely sufficient, and a pipeline whose whole claim is
-# reproducibility is better off with nothing to pin.  Revisit when the crawler
-# needs conditional GETs at corpus scale.
+# reproducibility is better off with nothing to pin.
+#
+# The note that used to sit here said "revisit when the crawler needs
+# conditional GETs at corpus scale."  It did, and the answer was no: an
+# `If-None-Match` header is three lines of `urllib.request` (see
+# `fetch.Fetcher.get`).  At one request every ten seconds there is no
+# connection pooling, HTTP/2 multiplexing or async concurrency worth having --
+# the crawl is delay-bound by policy, not throughput-bound by the client.
 dependencies = []
 
 [project.scripts]
 palimpsest-oracle0 = "palimpsest.oracle0:main"
+palimpsest-crawl = "palimpsest.crawl:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
