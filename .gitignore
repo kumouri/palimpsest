@@ -1,0 +1,19 @@
+# The crawl cache is a build artifact, not source.  It contains fetched statute
+# and Public Act text from ilga.gov; this repository distributes code, not a
+# mirror of the state's statutes.  Never commit it.
+cache/
+*.body
+
+# Oracle run outputs (the report in docs/ is committed; the raw run is not)
+out/
+*.diffs.txt
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
