@@ -26,25 +26,41 @@ That last row is the whole problem. The history line names every commit and lets
 them. Reconstructing what a statute said on a given date — or seeing what one Public Act actually
 changed — is currently manual work.
 
-It goes further than analogy. Bills are written as **amendatory instructions**:
+It goes further than analogy — and Illinois is unusually kind here. An amendatory bill says:
 
-> *"in Section 504(b-1), strike 'X' and insert 'Y'"*
+> *"The Election Code is amended by changing Section 28-1 as follows:"*
 
-That is a patch. Illinois law is stored as a patch series against a base text. It is simply a
-**fuzzy** patch format — no line numbers, no context hunks, and occasionally instructions like
-*"strike the second occurrence of"* — which is why applying it has resisted automation.
+…and then **reprints the entire section**, with deletions struck through and insertions
+underscored, per the Legislative Reference Bureau's Bill Drafting Manual. The drafter has already
+rendered the diff *and* the post-amendment text.
+
+That matters more than it sounds. The apply step for the dominant case is **whole-section
+replacement**, not fuzzy in-place editing — so the hard problem moves from *"can we execute this
+instruction correctly"* to **target resolution and ordering**: which section, which version, in
+what sequence, effective when. (An earlier framing of this project assumed a fuzzy,
+line-number-free patch format in the style of federal drafting. For Illinois that is largely
+wrong, and it is wrong in our favour.)
 
 ## The oracle
 
 This project can grade its own homework, which is rare and is the reason it is tractable.
 
-Take the codified base text, apply every Public Act in effective-date order, and compare the
-reconstruction against **the official current text published on ilga.gov**. No human evaluator is
-required — the right answer is already published.
+Because each Public Act carries the **full post-amendment text** of every section it touches, and
+each compiled ILCS section ends with a `(Source: P.A. …)` line naming the Act that last set it,
+the two can be compared directly — **tens of thousands of test cases available before a single
+line of parser exists.**
 
-Every mismatch is a genuine finding: either the patch engine is wrong, or the official compilation
-contains an error. Both are worth knowing. Progress is a percentage, measured per section, from
-day one.
+- **Oracle-0** — single hop: Act text vs. the compiled section it sourced.
+- **Oracle-1** — chain: reconstruct from history, compare to compiled.
+- **Oracle-2** — cross-publisher: compare against an independent compilation.
+
+No human evaluator is required. Every mismatch is a genuine finding: either the engine is wrong or
+the official compilation is. Both are worth knowing, and progress is a percentage from day one.
+
+**One honest caveat, and it is load-bearing:** ilga.gov's ILCS is a drafting **working tree, not a
+snapshot**. The ILGA states that changes are sometimes shown *before* they take effect, and that
+the version currently in force may already have been removed. Nothing this project publishes can
+truthfully be captioned "current law."
 
 ## Scope
 
@@ -66,8 +82,13 @@ would be a mistake.
 
 ## Status
 
-**Day one.** Nothing is built. A full technical and product spec is being written and will land
-here as `docs/spec.md`.
+**Day one.** Nothing is built. The full technical and product spec is at
+**[`docs/spec.md`](docs/spec.md)** — 15 sections, research-backed, sources cited.
+
+**Prior art, stated honestly:** [LawVM](https://lawvm.org/) is this idea, already built and open
+source, running for Finland, Estonia, New Zealand and the UK — but **no US state**. The concept is
+not novel; the Illinois work is unoccupied. Phase 0 evaluates LawVM as a possible dependency rather
+than assuming a rewrite.
 
 Open decisions, deliberately not yet made:
 
