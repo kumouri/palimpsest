@@ -376,12 +376,47 @@ class TestCorpusFloor(unittest.TestCase):
         # Ten requests is under two minutes of a four-hour budget.
         self.assertLessEqual(len(FLOOR_PROBE), 12)
 
+    def test_the_probe_result_is_read_off_the_mirror_not_a_run_counter(self):
+        """A resumed run, or a report generated after the crawl exited, must
+        still see a probe that is sitting complete on disk. Deriving it from a
+        counter turned a real measurement into "has not run"."""
+        with tempfile.TemporaryDirectory() as tmp:
+            fetcher = _fetcher(tmp)
+            self.assertEqual(crawl.probe_floor(fetcher), (0, []))
+
+            body = "AN ACT concerning government. " + "x" * 1000
+            placeholder = "<b>Document: 090-0001 is not currently available.</b>"
+            for pa in FLOOR_PROBE:
+                text = body if ga_of(pa) >= FLOOR_GA else placeholder
+                with mock.patch(
+                    "palimpsest.fetch.urllib.request.urlopen",
+                    return_value=_FakeResponse(text),
+                ):
+                    fetcher.get(public_act_url(pa))
+
+            # A brand new Fetcher: nothing in memory, everything on disk.
+            probed, disagreements = crawl.probe_floor(_fetcher(tmp))
+            self.assertEqual(probed, len(FLOOR_PROBE))
+            self.assertEqual(disagreements, [])
+
+    def test_a_pre_floor_act_that_returns_text_is_flagged_as_a_moved_floor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fetcher = _fetcher(tmp)
+            with mock.patch(
+                "palimpsest.fetch.urllib.request.urlopen",
+                return_value=_FakeResponse("AN ACT of 2001. " + "x" * 1000),
+            ):
+                fetcher.get(public_act_url("092-0001"))
+            probed, disagreements = crawl.probe_floor(fetcher)
+            self.assertEqual(probed, 1)
+            self.assertIn("092-0001", disagreements[0])
+
 
 class TestStatusFile(unittest.TestCase):
-    def _status(self, **kwargs) -> str:
+    def _status(self, floor=None, **kwargs) -> str:
         progress = Progress(started=time.time() - 600, total=1000, **kwargs)
         queue = Queue(built_at=0.0, skipped_below_floor=456, sample_sections=4600)
-        return status_markdown(progress, queue, deadline=time.time() + 3600)
+        return status_markdown(progress, queue, deadline=time.time() + 3600, floor=floor)
 
     def test_it_reports_the_four_numbers_the_brief_asks_for(self):
         text = self._status(done=250, requests=200)
@@ -416,19 +451,19 @@ class TestStatusFile(unittest.TestCase):
         self.assertIn("not silently folded into them", text)
 
     def test_a_moved_corpus_floor_is_reported_loudly(self):
-        text = self._status(done=1, requests=1, floor_moved=["092-0001 available"])
+        text = self._status(done=1, requests=1, floor=(10, ["092-0001 available"]))
         self.assertIn("disagrees with the recorded floor", text)
         self.assertIn("092-0001", text)
 
     def test_an_unmoved_floor_says_so_only_once_the_probe_has_actually_run(self):
-        self.assertIn("it held", self._status(done=1, requests=1, floor_probed=10))
+        self.assertIn("it held", self._status(done=1, requests=1, floor=(10, [])))
 
     def test_an_unrun_probe_is_not_reported_as_a_clean_measurement(self):
         """ "The probe found nothing" and "the probe has not run" are the same
         empty list. Reporting the second as the first claims a measurement that
         never happened."""
-        text = self._status(done=1, requests=1)
-        self.assertIn("has not run yet", text)
+        text = self._status(done=1, requests=1, floor=(0, []))
+        self.assertIn("has not run", text)
         self.assertIn("previously recorded", text)
         self.assertNotIn("it held", text)
 

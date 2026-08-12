@@ -475,7 +475,14 @@ def run(
     else:
         progress.stopped_because = "the queue was drained"
 
-    _write_status(progress, queue, status_paths, deadline, tier_breakdown(fetcher, queue))
+    _write_status(
+        progress,
+        queue,
+        status_paths,
+        deadline,
+        tier_breakdown(fetcher, queue),
+        probe_floor(fetcher),
+    )
     _save_run_summary(fetcher.cache_dir, progress)
     return progress
 
@@ -564,6 +571,34 @@ restore and no ``--from`` offset to get wrong.
 """
 
 
+def probe_floor(fetcher: Fetcher) -> tuple[int, list[str]]:
+    """Re-measure the corpus floor from the mirror. Returns ``(probed, disagreements)``.
+
+    Derived from the cache rather than from a counter the run kept, for the same
+    reason resumability is: **the mirror is the ledger.**  A run counter only
+    knows what *this* process fetched, so a resumed run, or a report generated
+    after the crawl exited, would read "the probe has not run" for a probe that
+    is sitting complete on disk -- turning a real measurement into a false
+    negative.  Reading the answer off the mirror is true whenever it is asked.
+    """
+    probed = 0
+    disagreements: list[str] = []
+    for pa in FLOOR_PROBE:
+        url = public_act_url(pa)
+        meta = fetcher._read_meta(url)
+        if meta is None:
+            continue
+        probed += 1
+        body = fetcher._read_body(url, meta) or ""
+        available = meta.get("status") == 200 and not is_soft_404(body) and len(body) > 500
+        expected = ga_of(pa) >= FLOOR_GA
+        if available and not expected:
+            disagreements.append(f"{pa} is available, but predates the {FLOOR_GA}rd GA")
+        elif expected and not available:
+            disagreements.append(f"{pa} is unavailable, but is at or above the {FLOOR_GA}rd GA")
+    return probed, disagreements
+
+
 def tier_breakdown(fetcher: Fetcher, queue: Queue) -> list[tuple[int, int, int]]:
     """``(tier, done, total)`` per tier, counted against the cache.
 
@@ -583,8 +618,9 @@ def tier_breakdown(fetcher: Fetcher, queue: Queue) -> list[tuple[int, int, int]]
 def status_markdown(
     progress: Progress,
     queue: Queue,
-    deadline: float,
+    deadline: float | None = None,
     breakdown: list[tuple[int, int, int]] | None = None,
+    floor: tuple[int, list[str]] | None = None,
 ) -> str:
     """The human-readable status file, regenerated in full every five minutes.
 
@@ -593,7 +629,14 @@ def status_markdown(
     same instant.
     """
     eta = progress.remaining * progress.rate if progress.rate else 0.0
-    budget_left = deadline - time.time()
+    floor_probed, floor_moved = (
+        floor
+        if floor is not None
+        else (
+            progress.floor_probed,
+            progress.floor_moved,
+        )
+    )
     stamp = time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime())
     pct = (100.0 * progress.done / progress.total) if progress.total else 0.0
 
@@ -609,15 +652,12 @@ def status_markdown(
         "",
         "| | |",
         "|---|---:|",
-        f"| Queue items done | {progress.done:,} of {progress.total:,} ({pct:.1f} %) |",
-        f"| ... already mirrored, no request needed | {progress.cached:,} |",
-        f"| ... fetched this run | {progress.done - progress.cached:,} |",
+        f"| Queue items mirrored | {progress.done:,} of {progress.total:,} ({pct:.1f} %) |",
         f"| Remaining in the queue | {progress.remaining:,} |",
-        f"| Network requests this run | {progress.requests:,} |",
-        f"| Elapsed | {_fmt_duration(progress.elapsed)} |",
-        f"| Observed rate | {progress.rate:.1f} s/request |",
+        f"| Network requests, last crawl run | {progress.requests:,} |",
+        f"| Wall clock, last crawl run | {_fmt_duration(progress.elapsed)} |",
+        f"| Observed rate | {progress.rate:.1f} s/request (floor is {CRAWL_DELAY:.0f}) |",
         f"| ETA for the rest of the queue | {_fmt_duration(eta)} |",
-        f"| Fetch budget remaining | {_fmt_duration(budget_left)} |",
         "",
         "## What came back",
         "",
@@ -625,7 +665,7 @@ def status_markdown(
         "|---|---:|",
         f"| ILCS sections mirrored this run | {progress.sections:,} |",
         f"| Sections mirrored in the seven Oracle-0 sample Acts | {queue.sample_sections:,} |",
-        f"| ... of those, checkable by the oracle once tier 0 lands | {queue.sample_checkable:,} |",
+        f"| ... of those, checkable against their own source Act | {queue.sample_checkable:,} |",
         f"| ... source Act predates the corpus floor, never checkable | {queue.sample_below_floor:,} |",
         f"| ... Source line names no Public Act at all | {queue.sample_no_public_act:,} |",
         f"| Public Acts newly discovered (tier 4) | {progress.discovered_pas:,} |",
@@ -640,27 +680,29 @@ def status_markdown(
         "not silently folded into them.",
         "",
     ]
-    if progress.floor_moved:
+    if floor_moved:
         lines += [
             "> **The floor probe disagrees with the recorded floor.** "
             "The queue's skip may be wrong:",
             "",
         ]
-        lines += [f"> - {note}" for note in progress.floor_moved]
+        lines += [f"> - {note}" for note in floor_moved]
         lines.append("")
-    elif progress.floor_probed:
+    elif floor_probed:
         lines += [
-            f"The floor probe re-measured the boundary this run ({progress.floor_probed} of "
-            f"{len(FLOOR_PROBE)} Acts fetched) and it held: the {FLOOR_GA}rd GA is still the",
-            "earliest General Assembly with published Public Act text.",
+            f"**The floor probe re-measured the boundary and it held**, {floor_probed} of "
+            f"{len(FLOOR_PROBE)} Acts checked against the mirror: every Act below the "
+            f"{FLOOR_GA}rd GA",
+            f"returns the placeholder and every Act at or above it returns text. The {FLOOR_GA}rd",
+            "remains the earliest General Assembly with published Public Act text, and the",
+            "queue's skip of the older ones is therefore still correct.",
             "",
         ]
     else:
         lines += [
-            "**The floor probe has not run yet**, so nothing here re-measures the corpus floor —",
-            f"the {FLOOR_GA}rd GA is the *previously recorded* boundary, carried forward. Either the",
-            "probe items were already mirrored from an earlier run, or the crawl stopped before",
-            "reaching them.",
+            "**The floor probe has not run**, so nothing here re-measures the corpus floor —",
+            f"the {FLOOR_GA}rd GA is the *previously recorded* boundary, carried forward rather",
+            "than confirmed.",
             "",
         ]
 
@@ -706,10 +748,11 @@ def _write_status(
     progress: Progress,
     queue: Queue,
     paths: list[Path],
-    deadline: float,
+    deadline: float | None = None,
     breakdown: list[tuple[int, int, int]] | None = None,
+    floor: tuple[int, list[str]] | None = None,
 ) -> None:
-    markdown = status_markdown(progress, queue, deadline, breakdown)
+    markdown = status_markdown(progress, queue, deadline, breakdown, floor)
     for path in paths:
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -721,6 +764,8 @@ def _write_status(
                         "rate_seconds_per_request": round(progress.rate, 2),
                         "elapsed_seconds": round(progress.elapsed, 1),
                         "skipped_below_floor": queue.skipped_below_floor,
+                        "floor_probed": (floor or (progress.floor_probed, []))[0],
+                        "floor_moved": (floor or (0, progress.floor_moved))[1],
                         "tiers": [
                             {"tier": t, "done": d, "total": n, "remaining": n - d}
                             for t, d, n in (breakdown or [])
@@ -817,7 +862,14 @@ def main(argv: list[str] | None = None) -> int:
                 break  # first candidate that parses wins; last-run.json is preferred
             except (OSError, ValueError):
                 continue
-        _write_status(progress, queue, [Path(p) for p in status_paths], deadline, breakdown)
+        _write_status(
+            progress,
+            queue,
+            [Path(p) for p in status_paths],
+            None,
+            breakdown,
+            probe_floor(fetcher),
+        )
         print(f"[report] {done:,}/{len(queue.items):,} items mirrored", flush=True)
         return 0
 
