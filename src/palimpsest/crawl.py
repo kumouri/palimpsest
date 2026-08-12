@@ -793,10 +793,16 @@ def main(argv: list[str] | None = None) -> int:
         done = sum(d for _tier, d, _n in breakdown)
         progress = Progress(started=time.time(), total=len(queue.items), done=done, cached=done)
         progress.stopped_because = "not running -- this is a report of the mirror on disk"
-        last = Path(args.cache) / "last-run.json"
-        if last.exists():
-            # Fold in the figures only the run itself can know (requests made,
-            # wall clock, observed rate) so the two halves cannot disagree.
+        # Fold in the figures only the run itself can know (requests made, wall
+        # clock, observed rate) so the two halves cannot disagree.  Prefer the
+        # end-of-run summary; fall back to the last five-minute JSON status,
+        # which carries the same fields and exists even if the run was killed
+        # before it could write a summary.
+        candidates = [Path(args.cache) / "last-run.json"]
+        candidates += [Path(p) for p in status_paths if Path(p).suffix == ".json"]
+        for last in candidates:
+            if not last.exists():
+                continue
             try:
                 previous = json.loads(last.read_text(encoding="utf-8"))
                 progress.requests = previous.get("requests", 0)
@@ -805,10 +811,12 @@ def main(argv: list[str] | None = None) -> int:
                 progress.soft_404 = previous.get("soft_404", 0)
                 progress.errors = previous.get("errors", 0)
                 progress.discovered_pas = previous.get("discovered_pas", 0)
+                progress.floor_probed = previous.get("floor_probed", 0)
                 progress.floor_moved = previous.get("floor_moved", [])
                 progress.stopped_because = previous.get("stopped_because", progress.stopped_because)
+                break  # first candidate that parses wins; last-run.json is preferred
             except (OSError, ValueError):
-                pass
+                continue
         _write_status(progress, queue, [Path(p) for p in status_paths], deadline, breakdown)
         print(f"[report] {done:,}/{len(queue.items):,} items mirrored", flush=True)
         return 0
