@@ -62,3 +62,45 @@ whole-section-restatement jurisdictions."
 **Open and unverified.** Which of Missouri, Indiana, Michigan, Colorado and South Dakota use
 restatement versus strike/insert is **not known** — nobody has checked. That question decides
 whether a fallback pick is cheap or is itself the hard proof case, so check before choosing.
+
+
+---
+
+## D-0003 — LawVM: take the ideas, build fresh (PROPOSED, awaiting owner)
+
+**Date:** 2026-08-11 · **Status:** **Proposed** — not yet ruled by Ceryce
+**Evidence:** [lawvm-evaluation.md](lawvm-evaluation.md)
+
+**Proposed decision.** Do not adopt or fork [LawVM](https://lawvm.org/). Build fresh, and steal its
+ideas deliberately and with attribution.
+
+**Why "adopt" is off the table** — it is *unavailable*, not merely unattractive. Not on PyPI. Zero
+releases, zero tags, self-declared unstable API. Decisively: **no extension point outside the
+tree.** A jurisdiction is a first-party package in `src/lawvm/` plus an edit to a hardcoded CLI
+list. There is nothing to depend on, only a tree to be inside of. Licence is MIT, which is
+one-directionally compatible with this project's Apache-2.0 (retain the notice; MIT carries no
+patent grant, which is part of why Apache-2.0 was chosen here).
+
+**The number that decides it.** LawVM's *own* US-federal lane — better sources than Illinois, a
+mature kernel, written by its own author — sits at **2,395 / 45,735 = 5.24% coverage.** Adopting
+removes perhaps a third of the *design* risk and almost none of the *implementation* cost.
+
+**Steal these, explicitly:**
+- **`oracle-check` as a first-class command.** Their published headline is 0.65% mean normalised
+  text edit distance against an archived Finlex surface. The oracle is not foreign to their design,
+  it *is* their design.
+- **The witness-anchored monotone denominator.** This project's spec does not have it and needs it:
+  it prevents coverage from improving when extraction *narrows*. Without it, the cheapest way to
+  raise a match rate is to quietly measure less — the exact self-deception the normaliser was
+  already flagged for.
+- Their divergence taxonomy and normalisation layering.
+
+**Also worth knowing:** it is a single maintainer, AI-agent-driven (~83 commits/day, 6,502 commits,
+**1 contributor, 0 issues ever, 0 PRs ever**), courting ministries rather than contributors, and the
+public repo is an admitted curated export of a larger private tree. Upstreaming a US-state adapter
+is not a realistic path.
+
+**One outbound action this unlocks, and it is Ceryce's to send:** LawVM's `us/spec/` states nine
+times that `uscode.house.gov` and the OLRC classification tables are **geo-blocked** from the
+maintainer's location. They are not blocked from Illinois. That is a concrete, specific thing this
+project can offer him that he demonstrably cannot get for himself.

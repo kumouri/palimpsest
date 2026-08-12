@@ -3,6 +3,12 @@
 > **Two rulings this document lists as open have since been made** (2026-08-11): the community
 > layer (§7) and the second jurisdiction (§10). See **[decisions.md](decisions.md)**, which is the
 > authority where the two disagree. The rest of the spec stands as written.
+>
+> **Three factual corrections to this document's LawVM section** (2026-08-11, from
+> [lawvm-evaluation.md](lawvm-evaluation.md)): it has a US lane (a ~24k-line exploratory
+> `us_federal` profile), it runs 8 jurisdictions in-tree plus 4 more listed on its site rather than
+> 4, and it is **one person**, not an independent team. Its own US-federal coverage stands at
+> **5.24%**. Read the evaluation before relying on §10's framing of it.
 
 **Status:** draft for owner review · **Scope:** Illinois, v1 · **Date:** 2026-08-11
 **Name:** none yet — a naming decision is out with the owner. This document says "the project" / "the system" throughout.
