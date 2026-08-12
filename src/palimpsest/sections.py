@@ -37,6 +37,25 @@ HEADER_RE = re.compile(
     re.S,
 )
 
+# A citation header inside a Public Act can carry a trailing operation marker:
+#
+#     (820 ILCS 305/1.1 new)      the Act ADDS this section, and prints its text
+#     (720 ILCS 5/12-31 rep.)     the Act REPEALS it, and prints NO text
+#
+# Across the pages cached for this run these appear 382 and 261 times
+# respectively.  Treating the marker as part of the section number is a silent
+# and expensive mistake: '820 ILCS 305/1.1 new' never compares equal to the
+# compiled '820 ILCS 305/1.1', so every section added by its own source Act looks
+# like a target-resolution failure when the Act plainly contains it.
+SECTION_MARKER_RE = re.compile(r"^(?P<section>.*?)\s+(?P<marker>new|rep\.)$", re.I)
+
+# '(was 720 ILCS 5/12-31)' -- a renumbering. The section keeps its text and
+# changes its address, so the old address becomes a tombstone in the compilation.
+WAS_RE = re.compile(
+    r"\(\s*was\s+(?P<chapter>\d+)\s+ILCS\s+(?P<act>[0-9A-Za-z.\-]+)\s*/\s*(?P<section>[^)]+?)\s*\)",
+    re.S | re.I,
+)
+
 # '(from Ch. 46, par. 28-1)' -- the pre-1993 Illinois Revised Statutes cross-ref.
 LEGACY_RE = re.compile(r"\(\s*from\s+Ch\.\s*(?P<legacy>[^)]+?)\s*\)", re.S | re.I)
 
@@ -49,6 +68,19 @@ SOURCE_RE = re.compile(r"\(\s*Source:\s*(?P<body>[^)]*?)\s*\)", re.S | re.I)
 
 # The catchline that opens the operative text: 'Sec. 28-1.'
 CATCHLINE_RE = re.compile(r"\bSec\.\s*(?P<num>[0-9A-Za-z.\-]+)\s*\.", re.S)
+
+# A Public Act's own internal division, at the start of a line:
+#
+#     Section 5. The Election Code is amended by changing Section 28-1 as follows:
+#     Section 99. Effective date. This Act takes effect upon becoming law.
+#
+# Illinois drafting distinguishes these cleanly from codified sections: an Act's
+# own divisions are "Section N." while a codified section's catchline is
+# "Sec. N.".  That distinction is what makes this safe to cut on -- and it has to
+# be cut on, because a section the Act *adds* carries no ``(Source:)`` trailer to
+# end it, so without this the Act's closing "Section 99. Effective date ..."
+# runs on into the added section's text and reads as a divergence.
+INSTRUCTION_RE = re.compile(r"^[ \t]*Section\s+\d+[0-9A-Za-z.\-]*\.", re.M)
 
 # A Public Act number as it appears in a Source line: '102-839', '103-0565'.
 PA_IN_SOURCE_RE = re.compile(r"\bP\.?\s?A\.?\s*(?P<num>\d{2,3}-\d{1,4})", re.I)
@@ -170,18 +202,44 @@ class SectionBlock:
     version_marker: str | None = None
     source: SourceLine | None = None
     catchline: str | None = None
+    op_marker: str | None = None
+    """``'new'``, ``'rep.'`` or ``None`` -- the operation the Act performs here."""
+    renumbered_from: Citation | None = None
+    """Set from a ``(was 10 ILCS 5/1-1)`` marker."""
 
     @property
     def has_version_marker(self) -> bool:
         return self.version_marker is not None
 
+    @property
+    def is_added(self) -> bool:
+        return self.op_marker == "new"
 
-def _make_block(citation: Citation, segment: str, src_match: re.Match | None) -> SectionBlock:
+    @property
+    def is_repealed_here(self) -> bool:
+        """The Act repeals this section, so the block carries no statutory text."""
+        return self.op_marker == "rep."
+
+
+def _make_block(
+    citation: Citation,
+    segment: str,
+    src_match: re.Match | None,
+    *,
+    op_marker: str | None = None,
+) -> SectionBlock:
     legacy = LEGACY_RE.search(segment)
     marker = VERSION_MARKER_RE.search(segment)
     catch = CATCHLINE_RE.search(segment)
 
-    body_end = src_match.start() if src_match else len(segment)
+    if src_match:
+        body_end = src_match.start()
+    else:
+        # No Source trailer -- typically a section the Act adds. Stop at the
+        # Act's next internal division rather than running to the next citation.
+        after_catch = catch.end() if catch else 0
+        instruction = INSTRUCTION_RE.search(segment, after_catch)
+        body_end = instruction.start() if instruction else len(segment)
     if catch:
         body_start = catch.start()
     else:
@@ -191,6 +249,7 @@ def _make_block(citation: Citation, segment: str, src_match: re.Match | None) ->
             (m.end() for m in (legacy, marker) if m and m.end() <= body_end),
             default=0,
         )
+    was = WAS_RE.search(segment[:body_end] if body_end else segment)
     return SectionBlock(
         citation=citation,
         raw=segment[: src_match.end()] if src_match else segment,
@@ -199,6 +258,16 @@ def _make_block(citation: Citation, segment: str, src_match: re.Match | None) ->
         version_marker=" ".join(marker.group(0).split()) if marker else None,
         source=parse_source_line(src_match.group("body")) if src_match else None,
         catchline=catch.group("num") if catch else None,
+        op_marker=op_marker,
+        renumbered_from=(
+            Citation(
+                chapter=was.group("chapter").strip(),
+                act=was.group("act").strip(),
+                section=" ".join(was.group("section").split()),
+            )
+            if was
+            else None
+        ),
     )
 
 
@@ -225,10 +294,16 @@ def parse_blocks(text: str) -> list[SectionBlock]:
         hard_end = headers[i + 1].start() if i + 1 < len(headers) else len(text)
         window = text[m.start() : hard_end]
 
+        section = " ".join(m.group("section").split())
+        op_marker: str | None = None
+        if (marker_match := SECTION_MARKER_RE.match(section)) is not None:
+            section = marker_match.group("section")
+            op_marker = marker_match.group("marker").lower()
+
         citation = Citation(
             chapter=m.group("chapter").strip(),
             act=m.group("act").strip(),
-            section=" ".join(m.group("section").split()),
+            section=section,
         )
         if not citation.section:
             # An act-level header such as '(5 ILCS 70/)', which introduces the
@@ -237,13 +312,13 @@ def parse_blocks(text: str) -> list[SectionBlock]:
 
         sources = list(SOURCE_RE.finditer(window))
         if not sources:
-            blocks.append(_make_block(citation, window, None))
+            blocks.append(_make_block(citation, window, None, op_marker=op_marker))
             continue
         cursor = 0
         for src in sources:
             segment = window[cursor : src.end()]
             local = SOURCE_RE.search(segment)
-            blocks.append(_make_block(citation, segment, local))
+            blocks.append(_make_block(citation, segment, local, op_marker=op_marker))
             cursor = src.end()
     return blocks
 

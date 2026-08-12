@@ -76,13 +76,61 @@ LINE_BREAK_TAGS = frozenset(
 # Tags whose content is never document text.
 SKIP_TAGS = frozenset({"style", "script", "title", "head"})
 
+DELETION_MARK = "\x00"
+"""Internal sentinel marking where struck-through text was removed.
+
+Never appears in returned text: :func:`_close_deletions` consumes every one.
+"""
+
+# A run of deletion marks together with whatever whitespace surrounds them.
+_DELETION_RUN_RE = re.compile(r"[ \t\r\n]*(?:\x00[ \t\r\n]*)+")
+
+# Punctuation that closes a clause. If a deletion sits immediately before one of
+# these, the space that joined the deleted phrase to its neighbours goes with it.
+_CLOSING_PUNCT = ",;:.)]}!?"
+
+
+def _close_deletions(text: str) -> str:
+    """Resolve the whitespace left behind where struck-through text was removed.
+
+    An enrolled Illinois Act marks a deletion around the *phrase*, and the space
+    that separated that phrase from what follows is inside the deletion or beside
+    it.  So removing::
+
+        the effective date <u>of ... 103rd</u> <strike>of ... 102nd</strike>, the
+
+    leaves ``...103rd , the`` -- with a space before the comma that the compiled
+    text does not have.
+
+    The obvious fix is a global "strip whitespace before punctuation" rule, and
+    it works.  It is also the wrong fix, and measurably so: run as a blanket
+    normalisation rule over both texts it accounted for **18 of 83 matches**, a
+    fifth of the headline number resting on a transformation applied everywhere
+    rather than where the deletion actually happened.  A rule that large has to
+    earn its place at the site it belongs to.
+
+    Doing it here instead means the repair is applied **only where text was
+    removed**, on one side only, and can therefore never manufacture agreement
+    between two texts that merely happen to be punctuated differently.
+    """
+
+    def repair(m: re.Match) -> str:
+        following = text[m.end() : m.end() + 1]
+        if following and following in _CLOSING_PUNCT:
+            return ""
+        return " " if any(c.isspace() for c in m.group(0)) else ""
+
+    return _DELETION_RUN_RE.sub(repair, text)
+
 
 class _TextExtractor(HTMLParser):
-    def __init__(self, *, drop_strike: bool) -> None:
+    def __init__(self, *, drop_strike: bool, drop_insert: bool) -> None:
         super().__init__(convert_charrefs=False)
         self.drop_strike = drop_strike
+        self.drop_insert = drop_insert
         self.out: list[str] = []
         self._strike_depth = 0
+        self._insert_depth = 0
         self._skip_depth = 0
         self.strike_spans = 0
         self.insert_spans = 0
@@ -95,6 +143,7 @@ class _TextExtractor(HTMLParser):
             self._strike_depth += 1
             self.strike_spans += 1
         elif tag in INSERT_TAGS:
+            self._insert_depth += 1
             self.insert_spans += 1
         if tag in LINE_BREAK_TAGS:
             self.out.append("\n")
@@ -109,6 +158,15 @@ class _TextExtractor(HTMLParser):
             self._skip_depth = max(0, self._skip_depth - 1)
         elif tag in STRIKE_TAGS:
             self._strike_depth = max(0, self._strike_depth - 1)
+            if self.drop_strike and not self._strike_depth:
+                # Mark where text was removed, so the whitespace the deletion
+                # took with it can be resolved at exactly this site and nowhere
+                # else. See _close_deletions.
+                self.out.append(DELETION_MARK)
+        elif tag in INSERT_TAGS:
+            self._insert_depth = max(0, self._insert_depth - 1)
+            if self.drop_insert and not self._insert_depth:
+                self.out.append(DELETION_MARK)
         if tag in LINE_BREAK_TAGS:
             self.out.append("\n")
 
@@ -116,6 +174,8 @@ class _TextExtractor(HTMLParser):
         if self._skip_depth:
             return
         if self._strike_depth and self.drop_strike:
+            return
+        if self._insert_depth and self.drop_insert:
             return
         self.out.append(text)
 
@@ -146,22 +206,27 @@ class Extraction:
         )
 
 
-def extract(html_text: str, *, drop_strike: bool = True) -> Extraction:
+def extract(html_text: str, *, drop_strike: bool = True, drop_insert: bool = False) -> Extraction:
     """Turn an ilga.gov page into line-oriented text.
 
-    ``drop_strike=True`` (the default, and what Oracle-0 uses) removes
-    struck-through text and keeps underscored text, which is exactly the
-    "apply the amendment" step for Illinois' whole-section-restatement format.
-    Pass ``drop_strike=False`` to recover the *pre*-amendment reading, which is
-    useful for the base-text hash described in spec §5.2.
+    The two useful settings:
+
+    * ``drop_strike=True, drop_insert=False`` (the default, and what Oracle-0
+      uses) -- remove struck-through text, keep underscored text.  This *is* the
+      "apply the amendment" step for Illinois' whole-section-restatement format.
+    * ``drop_strike=False, drop_insert=True`` -- keep struck text, drop
+      underscored text, recovering the section as it read **before** this Act.
+      That is the base text of spec §5.2, whose hash is what lets you tell
+      whether two Acts were drafted from the same predecessor.
     """
-    parser = _TextExtractor(drop_strike=drop_strike)
+    parser = _TextExtractor(drop_strike=drop_strike, drop_insert=drop_insert)
     parser.feed(html_text)
     parser.close()
     raw = "".join(parser.out)
     # Non-breaking spaces are layout, not content.  The four-nbsp run that marks
     # a paragraph indent is the single most common one.
     raw = raw.replace("\xa0", " ")
+    raw = _close_deletions(raw)
     # Collapse the many empty lines the table layout produces, but keep single
     # line boundaries -- the normaliser decides what to do with them.
     lines = [line.rstrip() for line in raw.split("\n")]

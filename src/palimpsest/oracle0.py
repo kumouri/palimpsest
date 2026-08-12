@@ -83,23 +83,32 @@ CLASS_UNRECONSTRUCTABLE = "UNRECONSTRUCTABLE"
 CLASS_ACT_NOT_ONLINE = "ACT_NOT_ONLINE"
 CLASS_TARGET_RESOLUTION = "TARGET_RESOLUTION"
 CLASS_REPEALED_STUB = "REPEALED_STUB"
+CLASS_RENUMBERED = "RENUMBERED"
 CLASS_NORMALIZE = "NORMALIZE"
 CLASS_MULTI_VERSION = "MULTI_VERSION"
 CLASS_MULTI_ACT = "MULTI_ACT"
 CLASS_DIVERGENCE = "DIVERGENCE"
 
-_ALNUM_RE = re.compile(r"[^a-z0-9]+")
+_ALNUM_RE = re.compile(r"[^A-Za-z0-9]+")
 
 
 def reduce_to_alnum(text: str) -> str:
     """The punitive comparison used only to *classify* a mismatch.
 
     If two texts are equal once every character that is not a letter or digit is
-    removed, then whatever differs between them is punctuation, case, or
-    whitespace -- i.e. a normalisation artifact rather than a difference in
-    words.  This is never used to decide a match; it only sorts failures.
+    removed, then whatever differs between them is punctuation or whitespace --
+    a normalisation artifact rather than a difference in words.  This never
+    decides a match; it only sorts failures.
+
+    **Case is deliberately preserved.**  Lowercasing here would be the quiet
+    kind of mistake this whole project is built to avoid: the normaliser does
+    not fold case (there is a test asserting it must not), so a case-only
+    difference is a real difference in the text, and excusing it as "cosmetic"
+    at classification time would bury it.  It buried a real one -- P.A. 97-81
+    prints "Unless **An** Act otherwise specifically provides" while the
+    compilation reads "Unless **an** Act".
     """
-    return _ALNUM_RE.sub("", text.lower())
+    return _ALNUM_RE.sub("", text)
 
 
 _REPEALED_RE = re.compile(r"^Sec\.?\s*\S*\s*\.?\s*\(\s*Repealed\s*\)\.?$", re.I)
@@ -117,6 +126,22 @@ def is_repeal_stub(body: str) -> bool:
     return bool(_REPEALED_RE.match(" ".join(body.split())))
 
 
+_RENUMBERED_RE = re.compile(r"\bRenumbered\s+by\b", re.I)
+
+
+def is_renumbered(source_line: str) -> bool:
+    """True if the compiled Source line says the section was renumbered away.
+
+    ``(Source: P.A. 88-392. Renumbered by P.A. 96-1551, eff. 7-1-11.)`` -- the
+    text moved to a new address and the old address is a tombstone.  The Act
+    prints the section under its *new* citation with a ``(was 720 ILCS 5/12-31)``
+    marker, so searching it for the old citation correctly finds nothing.  This
+    is the resectioning case of spec §2.5, and it is a limit of the single-hop
+    oracle rather than a failure of target resolution.
+    """
+    return bool(_RENUMBERED_RE.search(source_line))
+
+
 @dataclass
 class Case:
     citation: str
@@ -128,6 +153,10 @@ class Case:
     published_chars: int = 0
     replayed_chars: int = 0
     candidates_in_act: int = 0
+    added_by_this_act: bool = False
+    carried_amendment_markup: bool = False
+    """True if this section's reprint actually contained strike/underscore, so
+    the match depended on resolving it rather than on copying clean text."""
     published_version_marker: str | None = None
     matched_version_marker: str | None = None
     strike_spans_in_act: int = 0
@@ -244,6 +273,12 @@ def run(out_dir: Path, *, cache_dir: Path, offline: bool = False, limit: int | N
 
     act_cache: dict[str, list[SectionBlock] | None] = {}
     act_markup: dict[str, tuple[int, int]] = {}
+    act_pre: dict[str, list[SectionBlock]] = {}
+    """The same Acts parsed as they read *before* the amendment (struck text
+    kept, underscored text dropped). Comparing a section's pre- and
+    post-amendment bodies says whether that section actually carried amendatory
+    markup -- which is what separates "we applied the markup correctly" from "we
+    copied a clean reprint"."""
 
     def load_act(pa: str) -> tuple[list[SectionBlock], tuple[int, int]] | None:
         """Blocks of a Public Act; ``None`` means the Act is not online at all."""
@@ -263,6 +298,7 @@ def run(out_dir: Path, *, cache_dir: Path, offline: bool = False, limit: int | N
         blocks = parse_blocks(ex.text)
         act_cache[pa] = blocks
         act_markup[pa] = (ex.strike_spans, ex.insert_spans)
+        act_pre[pa] = parse_blocks(extract(page.body, drop_strike=False, drop_insert=True).text)
         return blocks, act_markup[pa]
 
     cases: list[Case] = []
@@ -301,15 +337,32 @@ def run(out_dir: Path, *, cache_dir: Path, offline: bool = False, limit: int | N
         case.strike_spans_in_act = strikes
         case.insert_spans_in_act = inserts
 
-        candidates = find_blocks_for(act_blocks, block.citation)
+        found = find_blocks_for(act_blocks, block.citation)
+        # A '(... rep.)' header names a section the Act repeals. It carries no
+        # statutory text, so it can never be the thing to compare against.
+        repealed_here = [b for b in found if b.is_repealed_here]
+        candidates = [b for b in found if not b.is_repealed_here]
         case.candidates_in_act = len(candidates)
+        case.added_by_this_act = any(b.is_added for b in candidates)
         chosen = best_candidate(block, candidates)
         if chosen is None:
-            if is_repeal_stub(block.body):
+            if repealed_here:
+                case.classification = CLASS_REPEALED_STUB
+                case.note = (
+                    f"the Act repeals this section -- it appears as "
+                    f"'({block.citation} rep.)' and reprints no text"
+                )
+            elif is_repeal_stub(block.body):
                 case.classification = CLASS_REPEALED_STUB
                 case.note = (
                     "the compiled section is a repeal tombstone; a repealing Act "
                     "does not reprint text, so single-hop comparison cannot apply"
+                )
+            elif is_renumbered(case.source_line):
+                case.classification = CLASS_RENUMBERED
+                case.note = (
+                    "the compiled Source line says this section was renumbered; "
+                    "the Act prints it under its new citation with a '(was ...)' marker"
                 )
             else:
                 case.classification = CLASS_TARGET_RESOLUTION
@@ -324,6 +377,9 @@ def run(out_dir: Path, *, cache_dir: Path, offline: bool = False, limit: int | N
 
         case.matched_version_marker = chosen.version_marker
         case.replayed_chars = len(chosen.body)
+        pre_blocks = find_blocks_for(act_pre.get(src.terminal_pa, []), block.citation)
+        if pre_blocks:
+            case.carried_amendment_markup = normalize(pre_blocks[0].body) != normalize(chosen.body)
         pairs.append((block.body, chosen.body))
         cmp_: Comparison = compare(block.body, chosen.body, label=case.citation)
         case.exact_match = cmp_.exact_match
@@ -377,8 +433,21 @@ def summarise(cases: list[Case], fetcher: Fetcher | None = None) -> dict:
         else:
             d["online"] += 1
 
+    with_markup = [c for c in attempted if c.carried_amendment_markup]
+    added = [c for c in attempted if c.added_by_this_act]
+    # Cases Oracle-0 cannot address by construction: a repealing Act reprints no
+    # text (spec §2.5) and a renumbering moves the text to another citation.
+    structural = [
+        c for c in attempted if c.classification in (CLASS_REPEALED_STUB, CLASS_RENUMBERED)
+    ]
+
     return {
         "ga_availability": dict(sorted(ga_availability.items(), key=lambda kv: int(kv[0]))),
+        "with_amendment_markup": len(with_markup),
+        "with_amendment_markup_matched": sum(1 for c in with_markup if c.normalized_match),
+        "added_by_source_act": len(added),
+        "added_by_source_act_matched": sum(1 for c in added if c.normalized_match),
+        "structurally_out_of_reach": len(structural),
         "pipeline_version": PIPELINE_VERSION,
         "normalizer_version": NORMALIZER_VERSION,
         "sampled": len(cases),

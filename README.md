@@ -50,7 +50,7 @@ each compiled ILCS section ends with a `(Source: P.A. …)` line naming the Act 
 the two can be compared directly — **tens of thousands of test cases available before a single
 line of parser exists.**
 
-- **Oracle-0** — single hop: Act text vs. the compiled section it sourced.
+- **Oracle-0** — single hop: Act text vs. the compiled section it sourced. **Built. 88.3 %.**
 - **Oracle-1** — chain: reconstruct from history, compare to compiled.
 - **Oracle-2** — cross-publisher: compare against an independent compilation.
 
@@ -82,8 +82,40 @@ would be a mistake.
 
 ## Status
 
-**Day one.** Nothing is built. The full technical and product spec is at
-**[`docs/spec.md`](docs/spec.md)** — 15 sections, research-backed, sources cited.
+**Oracle-0 is built and has produced its first number.**
+
+> ### 88.3 %
+> **83 of 94** ILCS sections match the Public Act their own `(Source: …)` line says last set them.
+> 112 sections sampled across 6 chapters; 18 excluded because their source Act is not published
+> online at all. Exact-byte match rate: **0 %** — the two routes wrap text at different column
+> widths, so nothing matches byte-for-byte and that is expected.
+>
+> **Full report, with every mismatch categorised: [`docs/oracle-0-baseline.md`](docs/oracle-0-baseline.md).**
+
+Three things that report establishes, beyond the number:
+
+- **The Phase 0 gating question is answered.** Public Act HTML carries the amendatory markup as real
+  `<strike>` and `<u>` tags. **No PDF pipeline is needed** — that was the largest schedule risk in
+  Phase 0 (spec §2.5, Appendix A) and it is retired.
+- **The corpus floor is the 93rd General Assembly (2003), not the ~90th (1997)** the spec estimated.
+  Measured, not assumed. **16 % of sampled sections are permanently unverifiable** because the Act
+  that last set them is not online.
+- **The spec's guessed 1–5 % human-review load measures at 3.2 %** — roughly right about the wrong
+  thing. The dominant cost is corpus coverage and structural cases (repeals, renumbering), not
+  interpretive review.
+
+Run it yourself:
+
+```bash
+PYTHONPATH=src python -m palimpsest.oracle0 --out out   # first run crawls, ~30 min at Crawl-delay: 10
+PYTHONPATH=src python -m unittest discover -s tests -t . # 111 tests, no network
+```
+
+Stdlib-only, no runtime dependencies. The crawl cache is a build artifact and is **not** committed —
+this repository distributes code, not a mirror of the state's statutes.
+
+The full technical and product spec is at **[`docs/spec.md`](docs/spec.md)** — 15 sections,
+research-backed, sources cited.
 
 **Prior art, stated honestly:** [LawVM](https://lawvm.org/) is this idea, already built and open
 source, running for Finland, Estonia, New Zealand and the UK — but **no US state**. The concept is

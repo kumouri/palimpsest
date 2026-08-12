@@ -52,6 +52,53 @@ class TestStrikeAndUnderscore(unittest.TestCase):
                 self.assertIn("keep", out.text)
 
 
+class TestDeletionWhitespace(unittest.TestCase):
+    """The whitespace a deletion leaves behind, repaired at the deletion site.
+
+    Doing this here rather than as a blanket "strip space before punctuation"
+    normalisation rule is what keeps the repair from being able to manufacture
+    agreement between two texts that are merely punctuated differently.
+    """
+
+    def test_a_deletion_before_a_comma_takes_its_space_with_it(self):
+        html = (
+            "<code>General Assembly</code><code> </code>"
+            "<strike><code>of the 102nd General Assembly</code></strike><code>, the</code>"
+        )
+        self.assertEqual(extract(html).text, "General Assembly, the")
+
+    def test_a_deletion_between_two_words_leaves_exactly_one_space(self):
+        html = "<code>alpha </code><strike><code>beta </code></strike><code>gamma</code>"
+        self.assertEqual(extract(html).text, "alpha gamma")
+
+    def test_a_deletion_with_no_surrounding_space_leaves_none(self):
+        html = "<code>alpha</code><strike><code>beta</code></strike><code>gamma</code>"
+        self.assertEqual(extract(html).text, "alphagamma")
+
+    def test_a_deletion_spanning_printed_lines_still_leaves_one_space(self):
+        html = (
+            "<tr><td><code>alpha </code><strike><code>beta </code></strike></td></tr>"
+            "<tr><td><strike><code>gamma</code></strike><code> delta</code></td></tr>"
+        )
+        self.assertEqual(extract(html).text, "alpha delta")
+
+    def test_the_sentinel_never_reaches_the_output(self):
+        html = "<p>a<strike>b</strike>c</p><p>d <u>e</u> <strike>f</strike>.</p>"
+        for kwargs in ({}, {"drop_strike": False, "drop_insert": True}):
+            with self.subTest(kwargs=kwargs):
+                self.assertNotIn("\x00", extract(html, **kwargs).text)
+
+    def test_the_pre_amendment_reading_drops_insertions_the_same_way(self):
+        html = (
+            "<code>date </code><u><code>of the 103rd</code></u>"
+            "<code> </code><strike><code>of the 102nd</code></strike><code>, x</code>"
+        )
+        post = extract(html).text
+        pre = extract(html, drop_strike=False, drop_insert=True).text
+        self.assertEqual(post, "date of the 103rd, x")
+        self.assertEqual(pre, "date of the 102nd, x")
+
+
 class TestBlockElements(unittest.TestCase):
     def test_center_is_a_line_boundary(self):
         # Regression: <center> wraps indented block quotes on the compiled ILCS

@@ -85,14 +85,20 @@ class TestSegment(unittest.TestCase):
 
 
 class TestReduceToAlnum(unittest.TestCase):
-    def test_punctuation_and_case_and_space_are_erased(self):
+    def test_punctuation_and_whitespace_are_erased(self):
         self.assertEqual(
             reduce_to_alnum("Assembly , the provisions"),
-            reduce_to_alnum("assembly, the provisions"),
+            reduce_to_alnum("Assembly, the provisions"),
         )
 
     def test_a_word_difference_survives(self):
         self.assertNotEqual(reduce_to_alnum("shall act"), reduce_to_alnum("must act"))
+
+    def test_case_is_preserved_so_a_case_difference_is_not_excused(self):
+        # The normaliser does not fold case, so a case-only difference is a real
+        # difference. Lowercasing here would have filed P.A. 97-81's "Unless An
+        # Act" against the compilation's "Unless an Act" as cosmetic.
+        self.assertNotEqual(reduce_to_alnum("Unless An Act"), reduce_to_alnum("Unless an Act"))
 
 
 class TestRepealStub(unittest.TestCase):
