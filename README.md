@@ -1,5 +1,7 @@
 # palimpsest
 
+[![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-00ff0f?style=flat-square)](LICENSE)
+
 > *palimpsest* (n.) — a manuscript page that has been scraped and written over, where the earlier
 > text is still faintly visible underneath.
 
@@ -69,12 +71,23 @@ here as `docs/spec.md`.
 
 Open decisions, deliberately not yet made:
 
-- **Licence — code and data will be licensed separately.** Not yet chosen; until then the default
-  applies and this is *not* an open-contribution repo.
+- ~~**Licence.**~~ **Settled: [Apache-2.0](LICENSE)** for the code. See *Licence* below for why the
+  statutory text itself is not covered by it.
 - **Contribution model.** Working prior: the reconstructed statutory text stays machine-derived and
   **immutable**, with all human contribution (plain-language summaries, "what changed and why",
   links to litigation) in a visibly separate annotation layer. If a person can hand-edit the
   authoritative text, it stops being a source of truth.
+
+## Licence
+
+The **code** in this repository is [Apache-2.0](LICENSE) © 2026 Ceryce Armstrong.
+
+The **statutory text** is not, because it cannot be. Under the *edicts of government* doctrine,
+the official text of the law is uncopyrightable — reaffirmed by the Supreme Court in
+*Georgia v. Public.Resource.Org, Inc.*, 590 U.S. 255 (2020), which held that even a state's own
+annotations to its code were not protected. Nothing here licenses the ILCS to you, because nothing
+needs to. Original work built *around* that text — the schema, the reconstruction engine, any
+commentary — is Apache-2.0 like the rest.
 
 ## This is not legal advice
 
