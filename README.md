@@ -87,8 +87,9 @@ would be a mistake.
 > ### 88.3 %
 > **83 of 94** ILCS sections match the Public Act their own `(Source: …)` line says last set them.
 > 112 sections sampled across 6 chapters; 18 excluded because their source Act is not published
-> online at all. Exact-byte match rate: **0 %** — the two routes wrap text at different column
-> widths, so nothing matches byte-for-byte and that is expected.
+> online at all. Against the **fixed** 112-section denominator — the figure that cannot be improved
+> by seeing less — it is **74.1 %**. Exact-byte match rate: **0 %**, because the two routes wrap text
+> at different column widths, so nothing matches byte-for-byte and that is expected.
 >
 > **Full report, with every mismatch categorised: [`docs/oracle-0-baseline.md`](docs/oracle-0-baseline.md).**
 

@@ -11,6 +11,10 @@
 > **83 of 94** attempted ILCS sections match the text of the Public Act their own
 > `(Source: …)` line says last set them.
 >
+> Against a **fixed** denominator of all 112 sections sampled — the figure that cannot be improved by
+> seeing less — it is **74.1 %**. Both are reported throughout; see
+> [the denominator note](#the-denominator-and-the-way-this-number-could-be-gamed).
+>
 > **Exact-byte match rate: 0.0 % (0 of 94).** Not a typo. See [§4](#4-the-two-numbers).
 
 112 sections were drawn from 7 ILCS Acts across 6 chapters, and 86 distinct Public Acts were fetched
@@ -86,6 +90,27 @@ not in this repository — see [§8](#8-what-is-deliberately-not-here).
 | **Attempted (the denominator)** | **94** |
 | **Match rate, normalised** | **88.3 %** (83/94) |
 | Match rate, exact bytes | 0.0 % (0/94) |
+
+### The denominator, and the way this number could be gamed
+
+[D-0003](decisions.md) adopts LawVM's **witness-anchored monotone denominator**, on the grounds that
+a denominator which shrinks when extraction narrows is *"the cheapest way to lie to yourself about a
+match rate."* The headline above is **not** monotone-anchored: it drops the 18 sections whose source
+Act is unavailable, so anything that made *more* Acts unresolvable would push the percentage **up**.
+
+So all three denominators, with the gameable one named as such:
+
+| Denominator | Rate | Gameable by narrowing? |
+|---|---:|---|
+| Fixed — every section sampled (112) | **74.1 %** (83/112) | **No.** Cannot rise by seeing less. |
+| Attempted — excludes unreachable Acts (94) | **88.3 %** (83/94) | **Yes.** The headline. |
+| Reachable — also excludes repeals/renumbering (86) | 96.5 % (83/86) | Yes, more so. |
+
+**74.1 % is the honest regression metric**, and it is the one to track over time. 88.3 % is quoted as
+the headline because it answers the question Oracle-0 was built to ask — *when we can see both texts,
+do they agree* — but it should never be reported without the 112-section figure beside it. Wiring the
+monotone denominator into the harness properly is follow-up work, not something this report claims to
+have done.
 
 ### Every sampled section, classified
 
@@ -535,7 +560,8 @@ scoped around.
 
 ## 10. Bottom line
 
-- **88.3 %** (83/94) single-hop match rate, first run, on a 112-section sample across 6 ILCS chapters.
+- **88.3 %** (83/94) single-hop match rate, first run, on a 112-section sample across 6 ILCS
+  chapters — or **74.1 %** (83/112) against the fixed denominator that cannot be gamed by narrowing.
 - **93.1 %** of matches required amendatory markup to be resolved correctly, not copied.
 - Spec §2.5's Phase 0 gating question is **answered**: Public Act HTML carries `<strike>` and `<u>` as
   real tags. **No PDF pipeline is needed.** That was the largest schedule risk in Phase 0 and it is
