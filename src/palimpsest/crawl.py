@@ -25,8 +25,9 @@ hours".  Two findings collapse that:
    embeds the full text of every section in it, and for the Acts too large for
    that, one ``ChapAct=FullText`` link returns the whole Act in a single
    document (``sample.sections_of_act``).  The Election Code is 963 sections in
-   one fetch.  The compiled-statute side of the corpus is therefore a few
-   thousand requests, not thirty thousand.
+   one fetch.  Measured by the index walk: **3,479 Acts across 68 chapters**, so
+   the compiled-statute side costs 3,479-6,958 requests -- roughly 10-19 hours
+   -- rather than 30,000 requests and 83.
 2. **The compiled side of the Oracle-0 sample is already mirrored.**  Oracle-0
    fetched seven Acts to sample 112 sections out of them -- but those seven
    fetches brought back **4,600 sections**, all still sitting in the cache.  The
@@ -332,6 +333,13 @@ class Progress:
     errors: int = 0
     sections: int = 0
     discovered_pas: int = 0
+    floor_probed: int = 0
+    """Floor-probe items actually fetched this run.
+
+    Kept separate from ``floor_moved`` because "the probe found nothing wrong"
+    and "the probe has not run yet" are the same empty list, and reporting the
+    second as the first would be claiming a measurement that never happened.
+    """
     floor_moved: list[str] = field(default_factory=list)
     stopped_because: str = "running"
 
@@ -459,6 +467,8 @@ def _fetch_item(fetcher: Fetcher, item: Item, progress: Progress) -> list[str]:
     if item.kind == KIND_PUBLIC_ACT:
         response = fetcher.get(item.url)
         progress.requests += fetcher.fetched - before
+        if item.tier == 1:
+            progress.floor_probed += 1
         if response.status == 404 or is_soft_404(response.body):
             progress.soft_404 += 1
             if ga_of(item.pa_number) >= FLOOR_GA and item.tier == 1:
@@ -601,10 +611,19 @@ def status_markdown(
         ]
         lines += [f"> - {note}" for note in progress.floor_moved]
         lines.append("")
+    elif progress.floor_probed:
+        lines += [
+            f"The floor probe re-measured the boundary this run ({progress.floor_probed} of "
+            f"{len(FLOOR_PROBE)} Acts fetched) and it held: the {FLOOR_GA}rd GA is still the",
+            "earliest General Assembly with published Public Act text.",
+            "",
+        ]
     else:
         lines += [
-            f"The floor probe re-measured the boundary this run and it held: the {FLOOR_GA}rd GA is",
-            "still the earliest with published Public Act text.",
+            "**The floor probe has not run yet**, so nothing here re-measures the corpus floor —",
+            f"the {FLOOR_GA}rd GA is the *previously recorded* boundary, carried forward. Either the",
+            "probe items were already mirrored from an earlier run, or the crawl stopped before",
+            "reaching them.",
             "",
         ]
 

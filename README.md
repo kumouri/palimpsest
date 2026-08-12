@@ -105,15 +105,39 @@ Three things that report establishes, beyond the number:
   thing. The dominant cost is corpus coverage and structural cases (repeals, renumbering), not
   interpretive review.
 
+**The bulk mirror is built** (`src/palimpsest/crawl.py`), and building it moved two numbers in the
+spec:
+
+- **The corpus is 3,479 ILCS Acts, not ~30,000 fetches.** The spec costed the crawl at one request
+  per section and got ~83 hours. But an Act's index page carries the full text of *every section in
+  it* — the Election Code is **963 sections in one request** — so the compiled side is ~10–19 hours.
+  `DocName` is the right primary key; it was never the right fetch plan. See
+  [`docs/spec.md`](docs/spec.md) §2.8.
+- **Oracle-0's seven sample Acts already hold 4,600 mirrored sections** — it scored 112 of them. The
+  only thing standing between the oracle and the other 4,488 is the Public Act each names as its
+  source: **680 Acts, ~1.7 hours of crawling to multiply the sample by forty.** So those go first.
+
+Live counts, what remains per tier, and the exact resume command:
+**[`docs/crawl-status.md`](docs/crawl-status.md)**.
+
 Run it yourself:
 
 ```bash
 PYTHONPATH=src python -m palimpsest.oracle0 --out out   # first run crawls, ~30 min at Crawl-delay: 10
-PYTHONPATH=src python -m unittest discover -s tests -t . # 111 tests, no network
+PYTHONPATH=src python -m palimpsest.crawl --max-hours 4 # the bulk mirror; resumable, stops on throttling
+PYTHONPATH=src python -m palimpsest.crawl --report-only # where the mirror is, fetches nothing
+PYTHONPATH=src python -m unittest discover -s tests -t . # 144 tests, no network
 ```
 
 Stdlib-only, no runtime dependencies. The crawl cache is a build artifact and is **not** committed —
 this repository distributes code, not a mirror of the state's statutes.
+
+**On being a good guest.** `robots.txt` is re-read before each change to the fetcher and enforced in
+code, not in a comment: `/search` and `/api` are refused at URL construction, the `Crawl-delay: 10`
+clock persists on disk so it holds *across* runs, there is exactly one request in flight and no
+parallelism to remove, and any response resembling rate limiting **ends the crawl** rather than
+triggering a retry. ilga.gov is the only publisher of this data; there is no second source and being
+blocked is unrecoverable.
 
 The full technical and product spec is at **[`docs/spec.md`](docs/spec.md)** — 15 sections,
 research-backed, sources cited.

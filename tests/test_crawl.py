@@ -399,8 +399,17 @@ class TestStatusFile(unittest.TestCase):
         self.assertIn("disagrees with the recorded floor", text)
         self.assertIn("092-0001", text)
 
-    def test_an_unmoved_floor_says_so_positively(self):
-        self.assertIn("it held", self._status(done=1, requests=1))
+    def test_an_unmoved_floor_says_so_only_once_the_probe_has_actually_run(self):
+        self.assertIn("it held", self._status(done=1, requests=1, floor_probed=10))
+
+    def test_an_unrun_probe_is_not_reported_as_a_clean_measurement(self):
+        """ "The probe found nothing" and "the probe has not run" are the same
+        empty list. Reporting the second as the first claims a measurement that
+        never happened."""
+        text = self._status(done=1, requests=1)
+        self.assertIn("has not run yet", text)
+        self.assertIn("previously recorded", text)
+        self.assertNotIn("it held", text)
 
     def test_the_rate_is_seconds_per_request_not_requests_per_second(self):
         progress = Progress(started=time.time() - 100, total=10, done=10, requests=10)
