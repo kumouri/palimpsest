@@ -66,9 +66,9 @@ whether a fallback pick is cheap or is itself the hard proof case, so check befo
 
 ---
 
-## D-0003 — LawVM: take the ideas, build fresh (PROPOSED, awaiting owner)
+## D-0003 — LawVM: take the ideas, build fresh
 
-**Date:** 2026-08-11 · **Status:** **Proposed** — not yet ruled by Ceryce
+**Date:** 2026-08-11 · **Status:** **Accepted** · **Ruled by:** Ceryce Armstrong, 2026-08-11
 **Evidence:** [lawvm-evaluation.md](lawvm-evaluation.md)
 
 **Proposed decision.** Do not adopt or fork [LawVM](https://lawvm.org/). Build fresh, and steal its
@@ -104,3 +104,9 @@ is not a realistic path.
 times that `uscode.house.gov` and the OLRC classification tables are **geo-blocked** from the
 maintainer's location. They are not blocked from Illinois. That is a concrete, specific thing this
 project can offer him that he demonstrably cannot get for himself.
+
+**Ruled 2026-08-11.** Build fresh, borrow deliberately and with attribution. Ceryce's framing:
+*"sounds like this would be better as separate projects for now that borrow portions from each
+other."* A friendly outreach email to the maintainer is drafted and held at her gate — praise, an
+honest statement that we are not proposing to upstream, and a concrete offer of the US federal
+sources that are geo-blocked from him.
