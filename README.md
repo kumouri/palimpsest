@@ -113,9 +113,17 @@ spec:
   it* — the Election Code is **963 sections in one request** — so the compiled side is ~10–19 hours.
   `DocName` is the right primary key; it was never the right fetch plan. See
   [`docs/spec.md`](docs/spec.md) §2.8.
-- **Oracle-0's seven sample Acts already hold 4,600 mirrored sections** — it scored 112 of them. The
-  only thing standing between the oracle and the other 4,488 is the Public Act each names as its
-  source: **680 Acts, ~1.7 hours of crawling to multiply the sample by forty.** So those go first.
+- **Oracle-0's seven sample Acts already hold 4,600 mirrored sections** — it scored 112 of them. What
+  stands between the oracle and the rest is the Public Act each names as its source: **680 Acts,
+  ~1.7 hours of crawling.** So those go first, ahead of any new statute fetching.
+- **But only 2,540 of those 4,600 are checkable, and that is the uncomfortable finding.** 39.1 % name
+  a source Act published before the corpus floor and can *never* be checked against it; another
+  5.7 % name no Public Act at all. Oracle-0 put that exclusion at 16 % — but its sample was
+  *stratified*, deliberately under-drawing the pre-corpus stratum. **A sample built for coverage of
+  the strata does not estimate their sizes**, and reading it as though it did understated the
+  corpus-coverage problem by a factor of two and a half. The realistic next-oracle ceiling is
+  **2,540 sections, 27× the 94 attempted** — a big number honestly arrived at, rather than a bigger
+  one.
 
 Live counts, what remains per tier, and the exact resume command:
 **[`docs/crawl-status.md`](docs/crawl-status.md)**.

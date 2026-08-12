@@ -180,6 +180,26 @@ text exists, so the reconstructable window is 2003→, not 1997→. **19 % of th
 out of reach for that reason alone**, and those sections are not unusual — they are ordinary
 provisions that simply have not been amended in twenty years.
 
+> **Correction (2026-08-12): 19 % is a property of this sample, not of the corpus. The population
+> figure is 39 %.**
+>
+> The bulk crawl enumerated every section in these same seven Acts — 4,600 of them, against the 112
+> sampled here — and counted how many name a source Public Act at or above the floor. The answer:
+> **2,540 checkable (55.2 %), 1,798 below the floor (39.1 %), 262 naming no Public Act (5.7 %)**.
+>
+> The gap is not an error in either number; it is what stratification does. `QUOTAS` draws ten
+> `recent` and ten `modern` sections per Act but only two `pre_corpus`, precisely so that the strata
+> are all *represented*. That makes the sample excellent for asking "does the pipeline work on each
+> kind of section" and invalid for asking "how much of the corpus is each kind" — and the 19 % was
+> quietly being read as the second. **A sample designed for coverage of the strata does not estimate
+> their sizes.**
+>
+> Nothing above changes: the match rate, the taxonomy and the floor measurement are all unaffected,
+> because they are all conditioned on the sample. What changes is the project's expectation of
+> reach. Two out of five sections in these Acts can never be single-hop checked against their own
+> source Act, and that is a corpus-coverage ceiling rather than something better engineering can
+> lift. Oracle-1 (chain replay) inherits it.
+
 ### The trap in how that is discovered
 
 An unavailable Act does **not** return HTTP 404. It returns **HTTP 200** with a 128-byte body:

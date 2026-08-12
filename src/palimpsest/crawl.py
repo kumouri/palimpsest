@@ -31,18 +31,29 @@ hours".  Two findings collapse that:
 2. **The compiled side of the Oracle-0 sample is already mirrored.**  Oracle-0
    fetched seven Acts to sample 112 sections out of them -- but those seven
    fetches brought back **4,600 sections**, all still sitting in the cache.  The
-   only thing stopping the oracle from running over all 4,600 is the *other*
-   side of each pair: the Public Act each section names as its source.
+   only thing stopping the oracle from running over them is the *other* side of
+   each pair: the Public Act each section names as its source.
+
+   **Of those 4,600, 2,540 are checkable** -- and the gap is the finding.  1,798
+   (39.1 %) name a source Act below the corpus floor and can never be checked
+   against it; 262 (5.7 %) name no Public Act at all.  Oracle-0 measured that
+   exclusion at 16 %, but its sample was *stratified* (ten recent, ten modern,
+   two pre-corpus per Act), which deliberately under-drew the pre-corpus
+   stratum.  Against the unstratified population the true rate is **39 %**.  A
+   sample designed for coverage of the strata is not a sample that estimates
+   their sizes, and reading one as the other understates the corpus-coverage
+   problem by a factor of two and a half.
 
 So the queue is ordered by what buys the next oracle run the most, per request:
 
 ===== ================================================================
 Tier  What, and why it is where it is
 ===== ================================================================
-0     The Public Acts cited by those 4,600 already-mirrored sections.
-      ~600 requests converts a 112-section oracle sample into a
-      4,600-section one.  Nothing else in the corpus comes close to
-      that ratio, so nothing else goes first.
+0     The Public Acts cited by those already-mirrored sections.  ~600
+      requests takes the oracle from 94 attempted sections to a
+      ceiling of 2,540 -- 27x -- with no new ILCS fetching at all.
+      Nothing else in the corpus comes close to that ratio, so
+      nothing else goes first.
 1     A probe of Public Acts *below* the measured corpus floor.  Ten
       requests to re-measure a boundary the rest of the queue assumes
       (see `FLOOR_GA`).  Cheap, and it stops an assumption from
@@ -156,6 +167,16 @@ class Queue:
     Recorded so that "we fetched everything in the queue" can never be mistaken
     for "we fetched everything there is"."""
     sample_sections: int = 0
+    """Sections mirrored in the seven Oracle-0 sample Acts."""
+    sample_checkable: int = 0
+    """How many of those the oracle can actually check once tier 0 lands.
+
+    Deliberately a separate number from ``sample_sections``.  A section is only
+    checkable if the Public Act its Source line names is published, and 45 % of
+    these are not -- so quoting the mirrored count as the oracle's reach would
+    overstate it by nearly a factor of two."""
+    sample_below_floor: int = 0
+    sample_no_public_act: int = 0
     chapters: int = 0
 
     def to_json(self) -> str:
@@ -187,10 +208,11 @@ def _act_key(label: str) -> tuple[str, str] | None:
 
 def sample_public_acts(
     fetcher: Fetcher, acts_by_key: dict[tuple[str, str], ActRef]
-) -> tuple[list[str], int, int]:
+) -> tuple[list[str], int, tuple[int, int, int, int]]:
     """Terminal Public Acts of every section in the Oracle-0 sample Acts.
 
-    Returns ``(pa_numbers_at_or_above_floor, skipped_below_floor, sections_seen)``.
+    Returns ``(pa_numbers_at_or_above_floor, skipped_below_floor, counts)`` where
+    ``counts`` is ``(sections_seen, checkable, below_floor, no_public_act)``.
 
     Reads only the cache -- these seven Acts were mirrored by the Oracle-0 run,
     so enumerating roughly six hundred high-value fetches costs zero requests.
@@ -199,7 +221,7 @@ def sample_public_acts(
     """
     at_floor: dict[str, None] = {}
     below = set()
-    sections = 0
+    sections = checkable = below_floor = no_pa = 0
     for chapter, act, _label in SAMPLE_ACTS:
         ref = acts_by_key.get((chapter, act))
         if ref is None:
@@ -211,13 +233,16 @@ def sample_public_acts(
         sections += len(blocks)
         for block in blocks:
             if not (block.source and block.source.terminal_pa):
+                no_pa += 1
                 continue
             raw = block.source.terminal_pa
             if ga_of(raw) >= FLOOR_GA:
                 at_floor.setdefault(normalise_pa_number(raw), None)
+                checkable += 1
             else:
                 below.add(normalise_pa_number(raw))
-    return list(at_floor), len(below), sections
+                below_floor += 1
+    return list(at_floor), len(below), (sections, checkable, below_floor, no_pa)
 
 
 def build_queue(fetcher: Fetcher, *, deadline: float | None = None) -> Queue:
@@ -259,10 +284,16 @@ def build_queue(fetcher: Fetcher, *, deadline: float | None = None) -> Queue:
             near = key is not None and key[0] in sample_chapters
             ordered.append((0 if near else 1, chapter.chapter_number, act))
 
-    pas, skipped, sections = sample_public_acts(fetcher, acts_by_key)
+    pas, skipped, counts = sample_public_acts(fetcher, acts_by_key)
+    sections, checkable, below_floor, no_pa = counts
     print(
         f"[build] sample Acts hold {sections} sections citing {len(pas)} Public Acts "
         f"at or above the {FLOOR_GA}rd GA ({skipped} older ones skipped)",
+        flush=True,
+    )
+    print(
+        f"[build] of those {sections} sections, {checkable} are checkable; "
+        f"{below_floor} name a source Act below the floor and {no_pa} name none",
         flush=True,
     )
 
@@ -307,6 +338,9 @@ def build_queue(fetcher: Fetcher, *, deadline: float | None = None) -> Queue:
         items=items,
         skipped_below_floor=skipped,
         sample_sections=sections,
+        sample_checkable=checkable,
+        sample_below_floor=below_floor,
+        sample_no_public_act=no_pa,
         chapters=len(chapters),
     )
 
@@ -590,7 +624,10 @@ def status_markdown(
         "| | |",
         "|---|---:|",
         f"| ILCS sections mirrored this run | {progress.sections:,} |",
-        f"| Sections already mirrored in the seven Oracle-0 sample Acts | {queue.sample_sections:,} |",
+        f"| Sections mirrored in the seven Oracle-0 sample Acts | {queue.sample_sections:,} |",
+        f"| ... of those, checkable by the oracle once tier 0 lands | {queue.sample_checkable:,} |",
+        f"| ... source Act predates the corpus floor, never checkable | {queue.sample_below_floor:,} |",
+        f"| ... Source line names no Public Act at all | {queue.sample_no_public_act:,} |",
         f"| Public Acts newly discovered (tier 4) | {progress.discovered_pas:,} |",
         f"| Documents not published online (soft 404) | {progress.soft_404:,} |",
         f"| Fetch errors | {progress.errors:,} |",

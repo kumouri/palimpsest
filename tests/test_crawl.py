@@ -388,6 +388,27 @@ class TestStatusFile(unittest.TestCase):
         for expected in ("Remaining", "Network requests", "Observed rate", "ETA"):
             self.assertIn(expected, text)
 
+    def test_the_checkable_ceiling_is_reported_apart_from_the_mirrored_count(self):
+        """Mirroring a section is not the same as being able to check it.
+
+        45 % of the sample Acts' sections name a source Act that is not
+        published, so quoting the mirrored count as the oracle's reach would
+        overstate it by nearly a factor of two.
+        """
+        progress = Progress(started=time.time() - 60, total=10, done=4, requests=4)
+        queue = Queue(
+            built_at=0.0,
+            sample_sections=4600,
+            sample_checkable=2540,
+            sample_below_floor=1798,
+            sample_no_public_act=262,
+        )
+        text = status_markdown(progress, queue, deadline=time.time() + 60)
+        self.assertIn("4,600", text)
+        self.assertIn("2,540", text)
+        self.assertIn("1,798", text)
+        self.assertIn("never checkable", text)
+
     def test_a_deliberate_skip_is_disclosed_rather_than_folded_into_the_counts(self):
         """A crawl that silently drops work reads as complete when it is not."""
         text = self._status(done=250, requests=200)
