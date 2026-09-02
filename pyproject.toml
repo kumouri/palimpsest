@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "palimpsest"
+version = "0.1.0"
+description = "A version-control system for Illinois statutory law: Oracle-0, the single-hop self-check."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+# No runtime dependencies, deliberately.  The spec (§8) recommends Python
+# stdlib-first with httpx + selectolax; for Oracle-0 the stdlib's urllib and
+# html.parser are entirely sufficient, and a pipeline whose whole claim is
+# reproducibility is better off with nothing to pin.  Revisit when the crawler
+# needs conditional GETs at corpus scale.
+dependencies = []
+
+[project.scripts]
+palimpsest-oracle0 = "palimpsest.oracle0:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
+ignore = [
+    "E501",   # long lines are usually prose in a docstring here
+    "SIM105", # contextlib.suppress is not clearer for a two-line except
+]

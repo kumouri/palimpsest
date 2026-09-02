@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [develop, master]
+  pull_request:
+    branches: [develop, master]
+
+# The oracle's whole claim is reproducibility, so CI must never reach the
+# network: no ilga.gov fetch happens in a run, and the tests are built to make
+# that possible (every fixture is a hand-written miniature of the real markup).
+env:
+  PYTHONPATH: src
+
+jobs:
+  test:
+    name: tests (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Byte-compile every tracked Python file
+        run: git ls-files '*.py' | xargs python -m py_compile
+
+      - name: Run the test suite
+        run: python -m unittest discover -s tests -t . -v
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install ruff==0.6.9
+
+      - name: ruff check
+        run: ruff check src tests
+
+      - name: ruff format --check
+        run: ruff format --check src tests
+
+  no-committed-corpus:
+    name: no fetched statute text committed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The crawl cache is a build artifact.  This repository distributes code,
+      # not a mirror of the state's statutes, and the terms-of-use question in
+      # spec §2.8 is still open.  Committing the cache would answer it by
+      # accident.
+      - name: Fail if the crawl cache was committed
+        run: |
+          if git ls-files --error-unmatch cache >/dev/null 2>&1; then
+            echo "::error::cache/ is committed; it is a build artifact and must stay gitignored"
+            exit 1
+          fi
+          if git ls-files | grep -E '\.body$'; then
+            echo "::error::fetched page bodies are committed"
+            exit 1
+          fi
+          echo "OK: no fetched corpus in the tree"
